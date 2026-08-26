@@ -1,0 +1,6 @@
+/dotlink-lint
+/bin/
+/dist/
+*.exe
+*.test
+*.out
