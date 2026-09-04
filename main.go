@@ -9,6 +9,7 @@ import (
 func main() {
 	jsonOut := flag.Bool("json", false, "emit machine-readable JSON instead of the human-readable report")
 	root := flag.String("root", ".", "directory that manifest source paths are resolved against")
+	apply := flag.Bool("apply", false, "create symlinks for pending entries; leaves ok, blocked, conflict, and missing_source entries untouched")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: %s [flags] <manifest-file>\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Checks a dotfile symlink manifest against the filesystem and reports\n")
@@ -43,6 +44,16 @@ func main() {
 	}
 
 	entries := Validate(lines, *root, home)
+
+	if *apply {
+		applyErr := applyPending(entries, *root, home)
+		// Re-validate so the printed report reflects what actually landed on
+		// disk rather than the pre-apply plan.
+		entries = Validate(lines, *root, home)
+		if applyErr != nil {
+			fmt.Fprintf(os.Stderr, "dotlink-lint: apply finished with errors\n")
+		}
+	}
 
 	var printErr error
 	if *jsonOut {

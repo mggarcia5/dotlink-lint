@@ -55,6 +55,23 @@ $ dotlink-lint --json --root ~/dotfiles ~/dotfiles/links.manifest
 ]
 ```
 
+Add `--apply` to actually create the links for every `pending` entry. It
+never touches `ok`, `blocked`, `conflict`, `missing_source`, or `invalid`
+entries - those are left exactly as reported, so a blocked file is never
+silently overwritten. Missing parent directories under the target are
+created as needed. After applying, the same report is printed again so you
+can see the final state, including anything that failed to link:
+
+```
+$ dotlink-lint --apply --root ~/dotfiles ~/dotfiles/links.manifest
+   1  ok              zsh/zshrc -> ~/.zshrc
+   2  ok              git/gitconfig -> ~/.gitconfig
+   3  blocked         nvim -> ~/.config/nvim  (/home/me/.config/nvim already exists and is not a symlink)
+   4  missing_source  tmux/tmux.conf -> ~/.tmux.conf  (/home/me/dotfiles/tmux/tmux.conf: no such file or directory)
+
+4 entries: 2 ok, 0 pending, 1 blocked, 0 conflict, 1 missing source, 0 invalid
+```
+
 ## Statuses
 
 - `ok` - target is already a symlink pointing at source.
