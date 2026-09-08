@@ -72,43 +72,107 @@ func Validate(lines []rawLine, root, home string) []Entry {
 			continue
 		}
 
-		resolvedTarget, err := expandHome(target, home)
-		if err != nil {
-			entries = append(entries, Entry{
-				Line:   line.Number,
-				Source: source,
-				Target: target,
-				Status: StatusInvalid,
-				Detail: err.Error(),
-			})
-			continue
-		}
-		if !filepath.IsAbs(resolvedTarget) {
-			entries = append(entries, Entry{
-				Line:   line.Number,
-				Source: source,
-				Target: target,
-				Status: StatusInvalid,
-				Detail: "target must be absolute or start with ~",
-			})
+		if isGlobPattern(source) {
+			entries = append(entries, expandGlob(line.Number, source, target, root, home, seenTargets)...)
 			continue
 		}
 
-		if first, dup := seenTargets[resolvedTarget]; dup {
-			entries = append(entries, Entry{
-				Line:   line.Number,
-				Source: source,
-				Target: target,
-				Status: StatusConflict,
-				Detail: fmt.Sprintf("target also claimed by line %d", first),
-			})
-			continue
-		}
-		seenTargets[resolvedTarget] = line.Number
-
-		entries = append(entries, checkEntry(line.Number, source, target, root, resolvedTarget))
+		entries = append(entries, resolveEntry(line.Number, source, target, root, home, seenTargets))
 	}
 
+	return entries
+}
+
+// resolveEntry validates one concrete source/target pair (already expanded
+// out of any glob) and, if it's not a duplicate target claim, checks it
+// against the filesystem.
+func resolveEntry(lineNo int, source, target, root, home string, seenTargets map[string]int) Entry {
+	resolvedTarget, err := expandHome(target, home)
+	if err != nil {
+		return Entry{
+			Line:   lineNo,
+			Source: source,
+			Target: target,
+			Status: StatusInvalid,
+			Detail: err.Error(),
+		}
+	}
+	if !filepath.IsAbs(resolvedTarget) {
+		return Entry{
+			Line:   lineNo,
+			Source: source,
+			Target: target,
+			Status: StatusInvalid,
+			Detail: "target must be absolute or start with ~",
+		}
+	}
+
+	if first, dup := seenTargets[resolvedTarget]; dup {
+		return Entry{
+			Line:   lineNo,
+			Source: source,
+			Target: target,
+			Status: StatusConflict,
+			Detail: fmt.Sprintf("target also claimed by line %d", first),
+		}
+	}
+	seenTargets[resolvedTarget] = lineNo
+
+	return checkEntry(lineNo, source, target, root, resolvedTarget)
+}
+
+// isGlobPattern reports whether source contains glob metacharacters and
+// should be expanded against the filesystem rather than treated literally.
+func isGlobPattern(source string) bool {
+	return strings.ContainsAny(source, "*?[")
+}
+
+// expandGlob resolves a glob source pattern into one Entry per matching file
+// under root. Since a single pattern can match many files, target names a
+// directory they all land in rather than a single path, so it must end in a
+// path separator. Each match keeps the manifest line's number, and is fed
+// through the normal duplicate-target and filesystem checks via
+// resolveEntry.
+func expandGlob(lineNo int, pattern, target, root, home string, seenTargets map[string]int) []Entry {
+	if !strings.HasSuffix(target, "/") {
+		return []Entry{{
+			Line:   lineNo,
+			Source: pattern,
+			Target: target,
+			Status: StatusInvalid,
+			Detail: "glob source requires a directory target ending in /",
+		}}
+	}
+
+	matches, err := filepath.Glob(filepath.Join(root, pattern))
+	if err != nil {
+		return []Entry{{
+			Line:   lineNo,
+			Source: pattern,
+			Target: target,
+			Status: StatusInvalid,
+			Detail: fmt.Sprintf("bad glob pattern: %v", err),
+		}}
+	}
+	if len(matches) == 0 {
+		return []Entry{{
+			Line:   lineNo,
+			Source: pattern,
+			Target: target,
+			Status: StatusMissingSource,
+			Detail: "no files matched pattern",
+		}}
+	}
+
+	entries := make([]Entry, 0, len(matches))
+	for _, match := range matches {
+		relSource, err := filepath.Rel(root, match)
+		if err != nil {
+			relSource = match
+		}
+		entryTarget := target + filepath.Base(match)
+		entries = append(entries, resolveEntry(lineNo, relSource, entryTarget, root, home, seenTargets))
+	}
 	return entries
 }
 

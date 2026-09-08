@@ -175,6 +175,93 @@ func TestValidateStatuses(t *testing.T) {
 	}
 }
 
+func TestValidateGlobExpansion(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(root, "scripts"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	for _, name := range []string{"a.sh", "b.sh"} {
+		if err := os.WriteFile(filepath.Join(root, "scripts", name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(home, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []rawLine{
+		{Number: 1, Text: fmt.Sprintf("scripts/*.sh -> %s/", filepath.Join(home, "bin"))},
+	}
+
+	entries := Validate(lines, root, home)
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2: %+v", len(entries), entries)
+	}
+
+	wantSources := map[string]bool{
+		filepath.Join("scripts", "a.sh"): false,
+		filepath.Join("scripts", "b.sh"): false,
+	}
+	for _, e := range entries {
+		if e.Line != 1 {
+			t.Errorf("entry %+v: line = %d, want 1", e, e.Line)
+		}
+		if e.Status != StatusPending {
+			t.Errorf("entry %+v: status = %q, want %q", e, e.Status, StatusPending)
+		}
+		if _, ok := wantSources[e.Source]; !ok {
+			t.Errorf("unexpected source %q in %+v", e.Source, e)
+			continue
+		}
+		wantSources[e.Source] = true
+		wantTarget := filepath.Join(home, "bin", filepath.Base(e.Source))
+		if e.Target != wantTarget {
+			t.Errorf("entry %+v: target = %q, want %q", e, e.Target, wantTarget)
+		}
+	}
+	for source, seen := range wantSources {
+		if !seen {
+			t.Errorf("expected an entry for source %q", source)
+		}
+	}
+}
+
+func TestValidateGlobNoMatches(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+
+	lines := []rawLine{
+		{Number: 1, Text: fmt.Sprintf("scripts/*.sh -> %s/", filepath.Join(home, "bin"))},
+	}
+
+	entries := Validate(lines, root, home)
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
+	}
+	if entries[0].Status != StatusMissingSource {
+		t.Errorf("status = %q, want %q", entries[0].Status, StatusMissingSource)
+	}
+}
+
+func TestValidateGlobRequiresDirectoryTarget(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+
+	lines := []rawLine{
+		{Number: 1, Text: fmt.Sprintf("scripts/*.sh -> %s", filepath.Join(home, "bin"))},
+	}
+
+	entries := Validate(lines, root, home)
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
+	}
+	if entries[0].Status != StatusInvalid {
+		t.Errorf("status = %q, want %q", entries[0].Status, StatusInvalid)
+	}
+}
+
 func TestValidateRelativeTargetIsInvalid(t *testing.T) {
 	root := t.TempDir()
 	lines := []rawLine{

@@ -21,6 +21,18 @@ nvim -> ~/.config/nvim
 tmux/tmux.conf -> ~/.tmux.conf
 ```
 
+`source` may also be a glob pattern (`*`, `?`, `[...]`), in which case it's
+expanded against every matching file under `--root`. Because a pattern can
+match more than one file, `target` in that case names a directory rather
+than a single path, and must end in `/`; each match lands there under its
+own base name:
+
+```
+scripts/*.sh -> ~/bin/
+```
+
+expands to one entry per matching file, e.g. `scripts/backup.sh -> ~/bin/backup.sh`.
+
 ## Usage
 
 ```
