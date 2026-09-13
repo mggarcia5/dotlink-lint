@@ -10,6 +10,7 @@ func main() {
 	jsonOut := flag.Bool("json", false, "emit machine-readable JSON instead of the human-readable report")
 	root := flag.String("root", ".", "directory that manifest source paths are resolved against")
 	apply := flag.Bool("apply", false, "create symlinks for pending entries; leaves ok, blocked, conflict, and missing_source entries untouched")
+	fix := flag.Bool("fix", false, "replace blocked targets with symlinks, one at a time after interactive confirmation")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: %s [flags] <manifest-file>\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Checks a dotfile symlink manifest against the filesystem and reports\n")
@@ -44,6 +45,16 @@ func main() {
 	}
 
 	entries := Validate(lines, *root, home)
+
+	if *fix {
+		fixErr := fixBlocked(entries, *root, home, os.Stdin, os.Stdout)
+		// Re-validate so a later --apply, or the printed report, sees the
+		// entries that got fixed as ok rather than the stale blocked status.
+		entries = Validate(lines, *root, home)
+		if fixErr != nil {
+			fmt.Fprintf(os.Stderr, "dotlink-lint: fix finished with errors\n")
+		}
+	}
 
 	if *apply {
 		applyErr := applyPending(entries, *root, home)

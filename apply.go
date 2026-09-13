@@ -21,32 +21,8 @@ func applyPending(entries []Entry, root, home string) error {
 			continue
 		}
 
-		resolvedTarget, err := expandHome(e.Target, home)
-		if err != nil {
-			// Already validated once; this would only happen if home changed
-			// between calls, which we treat as a bug rather than expected input.
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-
-		if err := os.MkdirAll(filepath.Dir(resolvedTarget), 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "dotlink-lint: creating %s: %v\n", filepath.Dir(resolvedTarget), err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-
-		sourcePath := filepath.Join(root, e.Source)
-		absSource, err := filepath.Abs(sourcePath)
-		if err != nil {
-			absSource = sourcePath
-		}
-
-		if err := os.Symlink(absSource, resolvedTarget); err != nil {
-			fmt.Fprintf(os.Stderr, "dotlink-lint: linking %s: %v\n", resolvedTarget, err)
+		if err := linkEntry(e, root, home); err != nil {
+			fmt.Fprintf(os.Stderr, "dotlink-lint: linking %s: %v\n", e.Target, err)
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -55,4 +31,29 @@ func applyPending(entries []Entry, root, home string) error {
 	}
 
 	return firstErr
+}
+
+// linkEntry creates the symlink for one entry's source -> target pair,
+// making any missing parent directories under the target along the way. It
+// does not check or touch whatever may already be at the target - callers
+// are responsible for making sure the target is clear first.
+func linkEntry(e Entry, root, home string) error {
+	resolvedTarget, err := expandHome(e.Target, home)
+	if err != nil {
+		// Already validated once; this would only happen if home changed
+		// between calls, which we treat as a bug rather than expected input.
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(resolvedTarget), 0o755); err != nil {
+		return err
+	}
+
+	sourcePath := filepath.Join(root, e.Source)
+	absSource, err := filepath.Abs(sourcePath)
+	if err != nil {
+		absSource = sourcePath
+	}
+
+	return os.Symlink(absSource, resolvedTarget)
 }

@@ -84,6 +84,24 @@ $ dotlink-lint --apply --root ~/dotfiles ~/dotfiles/links.manifest
 4 entries: 2 ok, 0 pending, 1 blocked, 0 conflict, 1 missing source, 0 invalid
 ```
 
+Add `--fix` to deal with `blocked` entries: for each one, it prompts before
+touching anything, and only replaces the target with a symlink if you answer
+`y`. Anything you decline, or that isn't blocked, is left exactly as it was:
+
+```
+$ dotlink-lint --fix --root ~/dotfiles ~/dotfiles/links.manifest
+~/.config/nvim already exists and is not a symlink; replace it with a link to nvim? [y/N] y
+   1  ok              zsh/zshrc -> ~/.zshrc
+   2  pending         git/gitconfig -> ~/.gitconfig
+   3  ok              nvim -> ~/.config/nvim
+   4  missing_source  tmux/tmux.conf -> ~/.tmux.conf  (/home/me/dotfiles/tmux/tmux.conf: no such file or directory)
+
+4 entries: 2 ok, 1 pending, 0 blocked, 0 conflict, 1 missing source, 0 invalid
+```
+
+`--fix` and `--apply` can be combined in one run; `--fix` runs first, so a
+target it clears can also pick up a link from `--apply` in the same pass.
+
 ## Statuses
 
 - `ok` - target is already a symlink pointing at source.
