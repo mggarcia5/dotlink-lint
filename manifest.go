@@ -134,13 +134,13 @@ func isGlobPattern(source string) bool {
 // through the normal duplicate-target and filesystem checks via
 // resolveEntry.
 func expandGlob(lineNo int, pattern, target, root, home string, seenTargets map[string]int) []Entry {
-	if !strings.HasSuffix(target, "/") {
+	if !hasTrailingSeparator(target) {
 		return []Entry{{
 			Line:   lineNo,
 			Source: pattern,
 			Target: target,
 			Status: StatusInvalid,
-			Detail: "glob source requires a directory target ending in /",
+			Detail: fmt.Sprintf("glob source requires a directory target ending in %q", string(filepath.Separator)),
 		}}
 	}
 
@@ -193,13 +193,23 @@ func expandHome(path, home string) (string, error) {
 	if path == "~" {
 		return home, nil
 	}
-	if strings.HasPrefix(path, "~/") {
+	// Accept both "~/" and, on Windows, "~\" - a manifest written on Windows
+	// will use the native separator, and os.IsPathSeparator is a no-op for
+	// everything but '\' there.
+	if len(path) >= 2 && path[0] == '~' && os.IsPathSeparator(path[1]) {
 		return filepath.Join(home, path[2:]), nil
 	}
 	if strings.HasPrefix(path, "~") {
 		return "", fmt.Errorf("unsupported ~user expansion in %q", path)
 	}
 	return path, nil
+}
+
+// hasTrailingSeparator reports whether target ends in a path separator for
+// the current platform, so a manifest written with Windows-style backslash
+// paths is accepted on Windows the same way a forward-slash one is elsewhere.
+func hasTrailingSeparator(target string) bool {
+	return target != "" && os.IsPathSeparator(target[len(target)-1])
 }
 
 // checkEntry compares one manifest line against the real filesystem state.

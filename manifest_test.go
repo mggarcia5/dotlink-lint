@@ -89,6 +89,20 @@ func TestExpandHome(t *testing.T) {
 	}
 }
 
+func TestExpandHomeNativeSeparator(t *testing.T) {
+	home := "/home/me"
+	path := "~" + string(os.PathSeparator) + ".zshrc"
+	want := filepath.Join(home, ".zshrc")
+
+	got, err := expandHome(path, home)
+	if err != nil {
+		t.Fatalf("expandHome(%q): %v", path, err)
+	}
+	if got != want {
+		t.Errorf("expandHome(%q) = %q, want %q", path, got, want)
+	}
+}
+
 func TestValidateStatuses(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
@@ -225,6 +239,31 @@ func TestValidateGlobExpansion(t *testing.T) {
 		if !seen {
 			t.Errorf("expected an entry for source %q", source)
 		}
+	}
+}
+
+func TestValidateGlobAcceptsNativeSeparatorTarget(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(root, "scripts"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "scripts", "a.sh"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("writing file: %v", err)
+	}
+
+	target := filepath.Join(home, "bin") + string(os.PathSeparator)
+	lines := []rawLine{
+		{Number: 1, Text: fmt.Sprintf("scripts/*.sh -> %s", target)},
+	}
+
+	entries := Validate(lines, root, home)
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1: %+v", len(entries), entries)
+	}
+	if entries[0].Status != StatusPending {
+		t.Errorf("status = %q, want %q", entries[0].Status, StatusPending)
 	}
 }
 
