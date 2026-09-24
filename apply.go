@@ -55,5 +55,11 @@ func linkEntry(e Entry, root, home string) error {
 		absSource = sourcePath
 	}
 
-	return os.Symlink(absSource, resolvedTarget)
+	if err := os.Symlink(absSource, resolvedTarget); err != nil {
+		if hint := symlinkPrivilegeHint(err); hint != "" {
+			return fmt.Errorf("%w (%s)", err, hint)
+		}
+		return err
+	}
+	return nil
 }
